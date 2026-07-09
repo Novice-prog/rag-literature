@@ -21,13 +21,6 @@ from langchain_community.vectorstores import FAISS
 
 load_dotenv()
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-if not GROQ_API_KEY:
-    raise RuntimeError(
-        "Не задан GROQ_API_KEY. Скопируй .env.example в .env и впиши свой ключ "
-        "(получить: https://console.groq.com/keys)."
-    )
-
 MODEL_NAME = "llama3-70b-8192"
 EMBEDDING_MODEL = "intfloat/multilingual-e5-small"
 VECTOR_DIR = "vectorization"
@@ -35,8 +28,30 @@ VECTOR_DIR = "vectorization"
 # Книги, разбитые на несколько частей при векторизации (ищем по всем частям).
 MULTIPART_BOOKS = {"Война и мир": ["Война и мир 1", "Война и мир 2"]}
 
-llm = ChatGroq(api_key=GROQ_API_KEY, model=MODEL_NAME)
-emb_model = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+# Тяжёлые объекты (LLM-клиент и модель эмбеддингов) инициализируются лениво —
+# чтобы import main не требовал ключа и не качал модель (важно для тестов).
+_llm = None
+_emb_model = None
+
+
+def get_llm():
+    global _llm
+    if _llm is None:
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "Не задан GROQ_API_KEY. Скопируй .env.example в .env и впиши свой ключ "
+                "(получить: https://console.groq.com/keys)."
+            )
+        _llm = ChatGroq(api_key=api_key, model=MODEL_NAME)
+    return _llm
+
+
+def get_emb_model():
+    global _emb_model
+    if _emb_model is None:
+        _emb_model = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+    return _emb_model
 
 
 def load_stores(book):
@@ -45,7 +60,7 @@ def load_stores(book):
     return [
         FAISS.load_local(
             folder_path=os.path.join(VECTOR_DIR, folder),
-            embeddings=emb_model,
+            embeddings=get_emb_model(),
             allow_dangerous_deserialization=True,
         )
         for folder in folders
@@ -54,7 +69,7 @@ def load_stores(book):
 
 def get_context(book, question, answers, k=10):
     """Ищет в индексе книги фрагменты, релевантные вопросу и вариантам ответа."""
-    query = llm.invoke(
+    query = get_llm().invoke(
         "Найди в вопросе ключевые слова, фразы или предложения, чтобы потом "
         f"искать по ним в книге нужные предложения для ответа:\nВопрос: {question}"
     ).content
@@ -135,7 +150,7 @@ def answer_question(book, question, answers):
     Возвращает (код ответа 1..4 или 0, текст рассуждения LLM).
     """
     context = get_context(book, question, answers)
-    response = llm.invoke(build_prompt(question, answers, context))
+    response = get_llm().invoke(build_prompt(question, answers, context))
     return extract_answer(response.content), response.content
 
 

@@ -1,0 +1,12 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    # Ключ GROQ_API_KEY берётся из файла .env (см. .env.example)
+    env_file:
+      - .env
+    # FAISS-индексы монтируются с хоста, в образ не зашиваются
+    volumes:
+      - ./vectorization:/app/vectorization
+    restart: unless-stopped

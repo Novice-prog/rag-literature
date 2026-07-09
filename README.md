@@ -32,6 +32,7 @@
 - **Эмбеддинги:** `intfloat/multilingual-e5-small` (HuggingFace)
 - **Векторный индекс:** FAISS
 - **Оркестрация:** LangChain
+- **API:** FastAPI + Uvicorn
 - **Данные:** pandas
 
 ## Установка
@@ -89,12 +90,67 @@ python main.py        # прогнать вопросы из LR2.csv, ответ
 python evaluate.py    # сравнить answers.csv с эталоном LR2_answer.csv
 ```
 
+## API-сервис (FastAPI)
+
+```bash
+uvicorn app:app --reload
+```
+
+Документация Swagger UI: http://127.0.0.1:8000/docs
+
+**`GET /health`** — проверка живости.
+
+**`POST /ask`** — ответить на вопрос по книге:
+
+```bash
+curl -X POST http://127.0.0.1:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{
+    "book": "Роковые яйца",
+    "question": "Что украли у профессора Персикова?",
+    "a": "Его красный луч",
+    "b": "Драгоценности",
+    "c": "Лабораторные записи",
+    "d": "Очки"
+  }'
+```
+
+Ответ:
+
+```json
+{
+  "code": 1,
+  "letter": "A",
+  "reasoning": "Подробный анализ вариантов... [ОТВЕТ: A]"
+}
+```
+
+`code`: `1=A, 2=B, 3=C, 4=D`, `0` — ответ не распознан. Если для указанной книги
+нет индекса в `vectorization/`, вернётся `404`.
+
+## Docker
+
+```bash
+docker build -t rag-literature .
+
+docker run --rm -p 8000:8000 \
+  -e GROQ_API_KEY=your_key \
+  -v "$(pwd)/vectorization:/app/vectorization" \
+  rag-literature
+```
+
+FAISS-индексы (`vectorization/`) и ключ в образ не зашиваются: индексы монтируются
+volume'ом, ключ передаётся через `-e GROQ_API_KEY`. Модель эмбеддингов
+скачивается при первом запросе (кэшируется в контейнере).
+
 ## Структура
 
 ```
-main.py           — RAG-пайплайн: поиск контекста + ответ LLM
+main.py           — RAG-пайплайн: поиск контекста + ответ LLM (answer_question)
+app.py            — FastAPI-сервис: POST /ask, GET /health
 build_index.py    — построение FAISS-индексов по книгам из books/
 evaluate.py       — подсчёт точности по эталонным ответам
+Dockerfile        — образ сервиса
 requirements.txt  — зависимости
 LR2*.csv          — датасеты вопросов и эталонных ответов
 ```

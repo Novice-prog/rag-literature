@@ -128,6 +128,17 @@ def extract_answer(text):
     return LETTER_TO_CODE.get(letter, 0)
 
 
+def answer_question(book, question, answers):
+    """Полный RAG-пайплайн для одного вопроса.
+
+    answers — dict с ключами 'a','b','c','d'.
+    Возвращает (код ответа 1..4 или 0, текст рассуждения LLM).
+    """
+    context = get_context(book, question, answers)
+    response = llm.invoke(build_prompt(question, answers, context))
+    return extract_answer(response.content), response.content
+
+
 def run(questions_csv="LR2.csv", answers_csv="LR2_answer.csv", output_csv="answers.csv"):
     lab = pd.read_csv(questions_csv, index_col=0)
     final = pd.DataFrame(columns=["answer"])
@@ -143,13 +154,12 @@ def run(questions_csv="LR2.csv", answers_csv="LR2_answer.csv", output_csv="answe
             "d": row["answer d"],
         }
 
-        context = get_context(book, question, answers)
-        response = llm.invoke(build_prompt(question, answers, context))
-        final.loc[i, "answer"] = extract_answer(response.content)
+        code, reasoning = answer_question(book, question, answers)
+        final.loc[i, "answer"] = code
         final.to_csv(output_csv)
 
-        print(response.content)
-        print(i, final.loc[i, "answer"])
+        print(reasoning)
+        print(i, code)
 
     if os.path.exists(answers_csv):
         evaluate(output_csv, answers_csv)

@@ -1,0 +1,13 @@
+venv/
+.venv/
+.idea/
+.vscode/
+__pycache__/
+*.py[cod]
+.git/
+.gitignore
+.env
+answers.csv
+books/
+dataset/
+README.md

@@ -67,13 +67,13 @@ cp .env.example .env
 2. Построй индексы:
 
    ```bash
-   python build_index.py
+   python -m rag_literature build-index
    ```
 
    Для каждой книги появится папка `vectorization/<название>/` с `index.faiss` и
    `index.pkl`.
 
-Формат датасета вопросов (`LR2.csv`, `LR2_dev.csv`):
+Датасеты вопросов лежат в `data/` (`LR2.csv`, `LR2_dev.csv`). Формат:
 
 | колонка | значение |
 |---|---|
@@ -81,19 +81,20 @@ cp .env.example .env
 | `answer a`…`answer d` | варианты ответа |
 | `book` | название книги |
 
-Эталонные ответы (`LR2_answer.csv`) — код правильного варианта: `1=a, 2=b, 3=c, 4=d`.
+Эталонные ответы (`data/LR2_answer.csv`) — код правильного варианта: `1=a, 2=b, 3=c, 4=d`.
 
-## Запуск
+## Запуск (CLI)
 
 ```bash
-python main.py        # прогнать вопросы из LR2.csv, ответы → answers.csv
-python evaluate.py    # сравнить answers.csv с эталоном LR2_answer.csv
+python -m rag_literature build-index   # построить индексы из books/
+python -m rag_literature answer        # прогнать вопросы, ответы → answers.csv
+python -m rag_literature evaluate      # сравнить answers.csv с эталоном
 ```
 
 ## API-сервис (FastAPI)
 
 ```bash
-uvicorn app:app --reload
+uvicorn rag_literature.api:app --reload
 ```
 
 Документация Swagger UI: http://127.0.0.1:8000/docs
@@ -158,22 +159,35 @@ pytest
 
 Тесты не требуют Groq-ключа: разбор ответа (`extract_answer`) проверяется напрямую,
 а эндпоинты — с замоканным пайплайном (тяжёлые LLM/эмбеддинги инициализируются
-лениво, поэтому `import main` дешёвый).
+лениво через `lru_cache`, поэтому импорт пакета дешёвый).
 
-## Структура
+## Архитектура
+
+Пакет разбит по слоям: конфиг → провайдеры → (retrieval / prompts / parsing) →
+pipeline → (api / cli).
 
 ```
-main.py           — RAG-пайплайн: поиск контекста + ответ LLM (answer_question)
-app.py            — FastAPI-сервис: POST /ask, GET /health
-build_index.py    — построение FAISS-индексов по книгам из books/
-evaluate.py       — подсчёт точности по эталонным ответам
-tests/            — юнит-тесты (extract_answer, эндпоинты /ask и /health)
-Dockerfile        — образ сервиса
-docker-compose.yml — запуск сервиса одной командой
-requirements.txt  — зависимости приложения
-requirements-dev.txt — зависимости для тестов
-LR2*.csv          — датасеты вопросов и эталонных ответов
+rag_literature/
+    config.py       — настройки, пути, чтение GROQ_API_KEY
+    providers.py    — ленивые синглтоны LLM и модели эмбеддингов (lru_cache)
+    parsing.py      — extract_answer, коды ответов (буква ↔ число)
+    prompts.py      — шаблоны промптов
+    retrieval.py    — загрузка FAISS-индексов, поиск контекста
+    pipeline.py     — answer_question (один вопрос) + answer_dataset (прогон CSV)
+    indexing.py     — построение FAISS-индексов из books/
+    evaluation.py   — подсчёт точности
+    api.py          — FastAPI: POST /ask, GET /health + pydantic-схемы
+    __main__.py     — CLI (build-index / answer / evaluate)
+data/               — датасеты вопросов и эталонных ответов (LR2*.csv)
+tests/              — pytest: parsing и эндпоинты API
+Dockerfile          — образ сервиса
+docker-compose.yml  — запуск сервиса одной командой
+requirements.txt / requirements-dev.txt — зависимости приложения / тестов
 ```
+
+Поток данных: `api.ask` / `cli answer` → `pipeline.answer_question` →
+`retrieval.get_context` (LLM выделяет ключевые слова → FAISS ищет фрагменты) →
+`prompts.answer_prompt` → LLM → `parsing.extract_answer`.
 
 ## Возможные улучшения
 

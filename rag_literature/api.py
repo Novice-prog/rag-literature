@@ -1,15 +1,6 @@
-"""
-FastAPI-сервис над RAG-пайплайном.
+"""FastAPI-сервис над RAG-пайплайном.
 
-Запуск локально:
-    uvicorn app:app --reload
-
-Эндпоинты:
-    GET  /health  — проверка живости
-    POST /ask     — ответить на вопрос с вариантами A/B/C/D по книге
-
-Требует построенных FAISS-индексов в vectorization/ (см. build_index.py)
-и переменной окружения GROQ_API_KEY.
+Запуск:  uvicorn rag_literature.api:app --reload
 """
 
 from typing import Optional
@@ -17,15 +8,14 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from main import answer_question
+from .parsing import CODE_TO_LETTER
+from .pipeline import answer_question
 
 app = FastAPI(
     title="RAG QA по русской литературе",
     description="Отвечает на вопросы с вариантами A/B/C/D, используя RAG над книгами.",
     version="1.0.0",
 )
-
-CODE_TO_LETTER = {1: "A", 2: "B", 3: "C", 4: "D"}
 
 
 class AskRequest(BaseModel):
@@ -67,7 +57,6 @@ def ask(req: AskRequest):
     try:
         code, reasoning = answer_question(req.book, req.question, answers)
     except (FileNotFoundError, RuntimeError) as exc:
-        # Нет индекса для книги или другая ошибка загрузки хранилища.
         raise HTTPException(
             status_code=404,
             detail=f"Не удалось обработать вопрос по книге «{req.book}»: {exc}",

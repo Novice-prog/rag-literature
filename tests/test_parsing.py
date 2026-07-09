@@ -2,7 +2,7 @@
 
 import pytest
 
-from main import extract_answer
+from rag_literature.parsing import extract_answer
 
 
 @pytest.mark.parametrize(

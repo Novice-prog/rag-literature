@@ -11,11 +11,12 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Код приложения
-COPY main.py app.py build_index.py evaluate.py ./
+# Код приложения (пакет + датасеты для CLI)
+COPY rag_literature ./rag_literature
+COPY data ./data
 
 # FAISS-индексы (vectorization/) и ключ GROQ_API_KEY пробрасываются при запуске,
 # в образ не зашиваются. См. README.
 EXPOSE 8000
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "rag_literature.api:app", "--host", "0.0.0.0", "--port", "8000"]

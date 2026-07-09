@@ -1,9 +1,8 @@
 """Тесты FastAPI-эндпоинтов с замоканным пайплайном (без реального LLM)."""
 
-import pytest
 from fastapi.testclient import TestClient
 
-import app as app_module
+from rag_literature import api as app_module
 
 client = TestClient(app_module.app)
 
